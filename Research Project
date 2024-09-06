@@ -1,0 +1,390 @@
+import pandas as pd
+
+# Load files
+water_flow_df = pd.read_excel('Dailywaterflow1223.xlsx')
+weather_df = pd.read_csv('Turkeyweather1222.csv')
+water_quality_df = pd.read_csv('waterquality1223.csv')
+
+# Convert date columns to datetime format for merging
+water_flow_df['Date'] = pd.to_datetime(water_flow_df['Date'])
+weather_df['Date_instant'] = pd.to_datetime(weather_df['Date_instant'])
+water_quality_df['Date_'] = pd.to_datetime(water_quality_df['Date_'])
+
+# Merge three dataframes based on date column
+merged_df = pd.merge(water_flow_df, weather_df, left_on='Date', right_on='Date_instant', how='outer')
+merged_df = pd.merge(merged_df, water_quality_df, left_on='Date', right_on='Date_', how='outer')
+
+# Remove unnecessary date columns after merging
+merged_df = merged_df.drop(columns=['Date_instant', 'Date_'])
+
+# Display the first few rows of the merged dataframe to ensure correctness
+merged_df.head()
+
+# The merged data is saved to a CSV file
+merged_df.to_csv('merged_data.csv', index=False, encoding='utf-8-sig')
+
+# 1. Load pandas
+import pandas as pd
+
+data = pd.read_csv('merged_data.csv')# Load data
+
+print(data.head())# View the first few rows of data
+print(data.info())# View basic information of the data
+print(data.isnull().sum())# Check for missing values
+
+# 2. EDA
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Descriptive Statistics
+print(data.describe())
+
+# Histogram
+data.hist(bins=50, figsize=(20, 15))
+plt.show()
+
+# Box plot to view outliers
+plt.figure(figsize=(20, 10))
+sns.boxplot(data=data)
+plt.xticks(rotation=90)
+plt.show()
+
+# Correlation heatmap
+plt.figure(figsize=(10, 8))
+sns.heatmap(data.corr(), annot=True, cmap='coolwarm')
+plt.show()
+#%%
+# 3. Feature Analysis
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+
+# Identifying non-numeric columns
+non_numeric_columns = data.select_dtypes(exclude=['float', 'int']).columns
+print("Non-numeric columns:", non_numeric_columns)
+
+# View the unique values of these non-numeric columns
+for column in non_numeric_columns:
+    print(f"Unique values in {column}:", data[column].unique())
+
+# Label encoding for non-numeric columns
+label_encoder = LabelEncoder()
+
+for column in non_numeric_columns:
+    data[column] = label_encoder.fit_transform(data[column].astype(str))
+
+# Recalculate the correlation matrix
+correlation_matrix = data.corr()
+
+# Highly correlated feature pairs
+high_corr_pairs = correlation_matrix.unstack().sort_values(ascending=False)
+print(high_corr_pairs[high_corr_pairs < 1].drop_duplicates())
+
+# Set the number of rows and columns of subplots
+num_columns = len(data.columns)
+cols = 4  # Put 4 sub-images per row
+rows = (num_columns + cols - 1) // cols  # Calculate the number of rows based on the number of columns
+
+plt.figure(figsize=(20, rows * 4))  # Resize figure to fit all subplots
+
+for i, column in enumerate(data.columns, 1):
+    plt.subplot(rows, cols, i)  # Set the subimage position
+    sns.histplot(data[column].dropna(), kde=True)
+    plt.title(f'Distribution of {column}')
+
+plt.tight_layout()
+plt.show()
+
+#%%
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
+
+# Identifying non-numeric columns
+non_numeric_columns = data.select_dtypes(exclude=['float', 'int']).columns
+print("Non-numeric columns:", non_numeric_columns)
+
+# View the unique values of these non-numeric columns
+for column in non_numeric_columns:
+    print(f"Unique values in {column}:", data[column].unique())
+
+# Label encoding for non-numeric columns
+label_encoder = LabelEncoder()
+
+for column in non_numeric_columns:
+    data[column] = label_encoder.fit_transform(data[column].astype(str))
+
+# Check for all missing columns and delete them
+missing_columns = data.columns[data.isnull().all()]
+if len(missing_columns) > 0:
+    print(f"Columns with all missing values: {missing_columns}")
+    data = data.drop(columns=missing_columns)
+
+# Using multiple imputation to handle missing values
+imputer = IterativeImputer(max_iter=10, random_state=0)
+data_imputed = pd.DataFrame(imputer.fit_transform(data), columns=data.columns)
+
+num_columns = len(data.columns)
+
+for i, column in enumerate(data.columns, 1):
+    plt.figure(figsize=(5, 5))  # Set the size of each image individually
+    sns.histplot(data[column].dropna(), kde=True, color='blue', label='Before Imputation', alpha=0.5)
+    sns.histplot(data_imputed[column].dropna(), kde=True, color='orange', label='After Imputation', alpha=0.5)
+    plt.title(f'Distribution of {column}')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()  # Each graph is displayed separately
+
+
+#%%
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+import matplotlib.pyplot as plt
+
+
+# Assume data_imputed is the interpolated data in the previous step, and there is a column representing the year
+# Assume the year column is named 'Date'
+year_column = 'Date'  # Need to be replaced with the actual year column name
+target_year = data_imputed[year_column].max()  # Get the last year
+
+# Delete the first column, use the second column as the target variable, and the other columns as features
+X = data_imputed.iloc[:, 2:].values  # features
+y = data_imputed.iloc[:, 1].values   # Predicted value
+
+# Split data using year
+train_indices = data_imputed[year_column] < target_year
+test_indices = data_imputed[year_column] == target_year
+
+X_train = X[train_indices]
+y_train = y[train_indices]
+
+X_test = X[test_indices]
+y_test = y[test_indices]
+
+# Data Standardization
+scaler_X = MinMaxScaler(feature_range=(0, 1))
+scaler_y = MinMaxScaler(feature_range=(0, 1))
+X_train_scaled = scaler_X.fit_transform(X_train)
+y_train_scaled = scaler_y.fit_transform(y_train.reshape(-1, 1))
+X_test_scaled = scaler_X.transform(X_test)
+y_test_scaled = scaler_y.transform(y_test.reshape(-1, 1))
+
+# Convert the data to the 3D shape required by the LSTM [samples, timesteps, features]
+X_train_scaled = np.reshape(X_train_scaled, (X_train_scaled.shape[0], 1, X_train_scaled.shape[1]))
+X_test_scaled = np.reshape(X_test_scaled, (X_test_scaled.shape[0], 1, X_test_scaled.shape[1]))
+
+# Building the LSTM model
+model = Sequential()
+model.add(LSTM(50, return_sequences=True, input_shape=(X_train_scaled.shape[1], X_train_scaled.shape[2])))
+model.add(LSTM(50))
+model.add(Dense(1))  # Output Layer
+
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+# Train the model and record the loss value
+history = model.fit(X_train_scaled, y_train_scaled, epochs=20, batch_size=32, validation_data=(X_test_scaled, y_test_scaled), verbose=1)
+
+# predict
+y_pred = model.predict(X_test_scaled)
+y_pred_rescaled = scaler_y.inverse_transform(y_pred)  # Descale the predictions back to their original values
+
+# Print array shape for debugging
+print(f"Shape of y_pred_rescaled: {y_pred_rescaled.shape}")
+print(f"Shape of y_test_scaled: {y_test_scaled.shape}")
+
+#%%
+# Print some prediction results and compare them with the actual values
+for i in range(min(5, len(y_pred_rescaled))):
+    print(f"Predicted: {y_pred_rescaled[i][0] if y_pred_rescaled.ndim > 1 else y_pred_rescaled[i]}, Actual: {scaler_y.inverse_transform(y_test_scaled)[i][0] if y_test_scaled.ndim > 1 else scaler_y.inverse_transform(y_test_scaled)[i]}")
+#%%
+# Plot the loss value changes of the training and validation sets
+plt.figure(figsize=(10, 6))
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Model Loss During Training')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+#%%
+import pandas as pd
+
+# Create a DataFrame to store the prediction results and actual values
+results_df = pd.DataFrame({
+    'Predicted': [y_pred_rescaled[i][0] if y_pred_rescaled.ndim > 1 else y_pred_rescaled[i] for i in range(len(y_pred_rescaled))],
+    'Actual': [scaler_y.inverse_transform(y_test_scaled)[i][0] if y_test_scaled.ndim > 1 else scaler_y.inverse_transform(y_test_scaled)[i] for i in range(len(y_test_scaled))]
+})
+
+# Saving DataFrame to Excel File
+results_df.to_excel('prediction_results.xlsx', index=False)
+
+print("Prediction results saved to 'prediction_results.xlsx'.")
+
+#%%
+import pandas as pd
+
+# Create a DataFrame to store the prediction results and actual values
+results_df = pd.DataFrame({
+    'Predicted': [y_pred_rescaled[i][0] if y_pred_rescaled.ndim > 1 else y_pred_rescaled[i] for i in range(len(y_pred_rescaled))],
+    'Actual': [scaler_y.inverse_transform(y_test_scaled)[i][0] if y_test_scaled.ndim > 1 else scaler_y.inverse_transform(y_test_scaled)[i] for i in range(len(y_test_scaled))]
+})
+
+# Saving DataFrame to Excel File
+results_df.to_excel('prediction_results.xlsx', index=False)
+
+print("Prediction results saved to 'prediction_results.xlsx'.")
+
+#%%
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error, r2_score
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, SimpleRNN, Dense, Conv1D, MaxPooling1D, Flatten
+import matplotlib.pyplot as plt
+
+# Assume data_imputed is the interpolated data from the previous step and has a column for the year
+year_column = 'Date'  # Need to be replaced with the actual year column name
+
+# Delete the first column, use the second column as the target variable, and the other columns as features
+X = data_imputed.iloc[:, 2:].values  # Feature value
+y = data_imputed.iloc[:, 1].values  # Predicted value
+
+# Use the last 20 data as the test set and the rest as the training set
+test_size = 20
+X_train = X[:-test_size]
+y_train = y[:-test_size]
+
+X_test = X[-test_size:]
+y_test = y[-test_size:]
+
+# Data Standardization
+scaler_X = MinMaxScaler(feature_range=(0, 1))
+scaler_y = MinMaxScaler(feature_range=(0, 1))
+X_train_scaled = scaler_X.fit_transform(X_train)
+y_train_scaled = scaler_y.fit_transform(y_train.reshape(-1, 1))
+X_test_scaled = scaler_X.transform(X_test)
+y_test_scaled = scaler_y.transform(y_test.reshape(-1, 1))
+
+# Convert data to the 3D shape required by LSTM and CNN [samples, timesteps, features]
+X_train_3d = np.reshape(X_train_scaled, (X_train_scaled.shape[0], 1, X_train_scaled.shape[1]))
+X_test_3d = np.reshape(X_test_scaled, (X_test_scaled.shape[0], 1, X_test_scaled.shape[1]))
+
+# Building the LSTM model
+lstm_model = Sequential()
+lstm_model.add(LSTM(100, return_sequences=True, input_shape=(X_train_3d.shape[1], X_train_3d.shape[2])))  # Increase the number of LSTM layer units
+lstm_model.add(LSTM(100))  # Increase the number of LSTM layer units
+lstm_model.add(Dense(1))  # Output layer, output 1 predicted value
+
+lstm_model.compile(optimizer='adam', loss='mean_squared_error')
+
+# Train the LSTM model, increase epochs and batch_size
+lstm_model.fit(X_train_3d, y_train_scaled, epochs=50, batch_size=64, validation_data=(X_test_3d, y_test_scaled),
+               verbose=1)
+
+# LSTM predict
+y_pred_lstm = lstm_model.predict(X_test_3d)
+y_pred_lstm_rescaled = scaler_y.inverse_transform(y_pred_lstm)
+
+# Build an RNN model to replace the original random forest model
+rnn_model = Sequential()
+rnn_model.add(SimpleRNN(100, input_shape=(X_train_3d.shape[1], X_train_3d.shape[2])))  # Increase the number of RNN layer units
+rnn_model.add(Dense(1))  # Output layer, output 1 predicted value
+
+rnn_model.compile(optimizer='adam', loss='mean_squared_error')
+
+# Training the RNN model
+rnn_model.fit(X_train_3d, y_train_scaled, epochs=50, batch_size=64, validation_data=(X_test_3d, y_test_scaled),
+              verbose=1)
+
+# RNN predict
+y_pred_rnn = rnn_model.predict(X_test_3d)
+y_pred_rnn_rescaled = scaler_y.inverse_transform(y_pred_rnn)
+
+# Build a CNN model and reduce the number of filters in the convolutional layer
+cnn_model = Sequential()
+cnn_model.add(Conv1D(filters=16, kernel_size=1, activation='relu',
+                     input_shape=(X_train_3d.shape[1], X_train_3d.shape[2])))  # Reduce the number of filters in convolutional layers
+cnn_model.add(MaxPooling1D(pool_size=1))  # Simplifying the pooling layer
+cnn_model.add(Flatten())
+cnn_model.add(Dense(10, activation='relu'))  # Reduce the number of neurons in the fully connected layers
+cnn_model.add(Dense(1))  # Output layer, output 1 predicted value
+
+cnn_model.compile(optimizer='adam', loss='mean_squared_error')
+
+# Train CNN model, reduce epochs and batch_size
+cnn_model.fit(X_train_3d, y_train_scaled, epochs=5, batch_size=16, validation_data=(X_test_3d, y_test_scaled),
+              verbose=1)
+
+# CNN predict
+y_pred_cnn = cnn_model.predict(X_test_3d)
+y_pred_cnn_rescaled = scaler_y.inverse_transform(y_pred_cnn)
+
+
+# Calculate MSE、RMSE、NSE
+def calculate_metrics(y_true, y_pred):
+    mse = mean_squared_error(y_true, y_pred)
+    rmse = np.sqrt(mse)
+    nse = 1 - (np.sum((y_true - y_pred) ** 2) / np.sum((y_true - np.mean(y_true)) ** 2))
+    return mse, rmse, nse
+
+
+# Calculate the performance indicators of each model
+mse_lstm, rmse_lstm, nse_lstm = calculate_metrics(y_test, y_pred_lstm_rescaled)
+mse_rnn, rmse_rnn, nse_rnn = calculate_metrics(y_test, y_pred_rnn_rescaled)
+mse_cnn, rmse_cnn, nse_cnn = calculate_metrics(y_test, y_pred_cnn_rescaled)
+
+# Print Results
+print("LSTM: MSE =", mse_lstm, ", RMSE =", rmse_lstm, ", NSE =", nse_lstm)
+print("RNN: MSE =", mse_rnn, ", RMSE =", rmse_rnn, ", NSE =", nse_rnn)
+print("CNN: MSE =", mse_cnn, ", RMSE =", rmse_cnn, ", NSE =", nse_cnn)
+
+# Draw a histogram of MSE, RMSE, and NSE
+metrics = ['MSE', 'RMSE', 'NSE']
+lstm_metrics = [mse_lstm, rmse_lstm, nse_lstm]
+rnn_metrics = [mse_rnn, rmse_rnn, nse_rnn]
+cnn_metrics = [mse_cnn, rmse_cnn, nse_cnn]
+
+x = np.arange(len(metrics))
+width = 0.25  # The width of each bar
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Draw a bar chart
+rects1 = ax.bar(x - width, lstm_metrics, width, label='LSTM')
+rects2 = ax.bar(x, rnn_metrics, width, label='RNN')
+rects3 = ax.bar(x + width, cnn_metrics, width, label='CNN')
+
+# Add labels, titles, and custom x-axis tick labels
+ax.set_xlabel('Metrics')
+ax.set_ylabel('Values')
+ax.set_title('Comparison of MSE, RMSE, NSE for LSTM, RNN, and CNN')
+ax.set_xticks(x)
+ax.set_xticklabels(metrics)
+ax.legend()
+
+
+# Add value labels to the bar chart
+def autolabel(rects):
+    """Add value labels to each bar"""
+    for rect in rects:
+        height = rect.get_height()
+        ax.annotate(f'{height:.2f}',
+                    xy=(rect.get_x() + rect.get_width() / 2, height),
+                    xytext=(0, 3),  # 3 points vertical offset
+                    textcoords="offset points",
+                    ha='center', va='bottom')
+
+
+autolabel(rects1)
+autolabel(rects2)
+autolabel(rects3)
+
+plt.show()
+
